@@ -117,5 +117,6 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 .logs details { margin-top: 8px; background: #0b152a; color: #e2e8f0; padding: 8px; border-radius: 8px; }
 .logs pre { background: transparent; color: #e2e8f0; max-height: 180px; }
+.logs summary { cursor: pointer; font-weight: 600; }
 .compare { margin-top: 8px; }
 .compare a { color: #2563eb; font-weight: 600; text-decoration: none; }

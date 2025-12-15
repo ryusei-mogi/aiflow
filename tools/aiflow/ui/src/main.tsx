@@ -81,6 +81,7 @@ function RunPanel({ requestId }: { requestId: string | null }) {
   const [running, setRunning] = useState(false);
   const [steps, setSteps] = useState<any[]>([]);
   const [logs, setLogs] = useState<{unit?: string; qa?: string}>({});
+  const [qaIssues, setQaIssues] = useState<any[]>([]);
 
   const loadMessages = async () => {
     try {
@@ -99,6 +100,8 @@ function RunPanel({ requestId }: { requestId: string | null }) {
       const stageResp = await api(`/api/requests/${requestId}/runs/${runId}/stage`);
       setStage(stageResp.stage);
       setSteps(stageResp.stage?.steps || []);
+      const stepQaIssues = (stageResp.stage?.steps || []).flatMap((s: any) => s.qa_issues || []);
+      setQaIssues(stepQaIssues);
       try {
         const reportText = await api(`/api/requests/${requestId}/runs/${runId}/report`);
         setReport(typeof reportText === 'string' ? reportText : '');
@@ -108,6 +111,9 @@ function RunPanel({ requestId }: { requestId: string | null }) {
       try {
         const err = await api(`/api/requests/${requestId}/runs/${runId}/errors`);
         setErrors(err.errors?.error || null);
+        if (err.errors?.error?.meta?.issues) {
+          setQaIssues(err.errors.error.meta.issues);
+        }
       } catch {
         setErrors(null);
       }
@@ -125,6 +131,7 @@ function RunPanel({ requestId }: { requestId: string | null }) {
       setErrors(null);
       setSteps([]);
       setLogs({});
+      setQaIssues([]);
     }
   };
 
@@ -212,6 +219,16 @@ function RunPanel({ requestId }: { requestId: string | null }) {
             <summary>QA Log</summary>
             <pre>{logs.qa || 'No qa log'}</pre>
           </details>
+          {qaIssues.length > 0 && (
+            <details open>
+              <summary>QA Issues</summary>
+              <ul>
+                {qaIssues.map((i: any, idx: number) => (
+                  <li key={idx}>{i.severity ? `[${i.severity}] ` : ''}{i.description || i}</li>
+                ))}
+              </ul>
+            </details>
+          )}
         </div>
       </div>
     </div>
