@@ -159,6 +159,16 @@ function RunPanel({ requestId }: { requestId: string | null }) {
                 <div className="step-title">{s.step_id}: {s.title}</div>
                 <div className="step-status">{s.status}</div>
                 <div className="step-summary">{s.summary}</div>
+                {s.qa_issues && s.qa_issues.length > 0 && (
+                  <div className="qa-issues">
+                    <div className="qa-title">QA Issues:</div>
+                    <ul>
+                      {s.qa_issues.map((i: any, idx: number) => (
+                        <li key={idx}>{i.severity ? `[${i.severity}] ` : ''}{i.description || i}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             ))}
           </div>
