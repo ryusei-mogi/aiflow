@@ -410,6 +410,25 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
     } else {
       stage.steps[0].test.unit.status = 'SKIPPED';
     }
+    // E2E placeholder (if configured)
+    if (config.tests?.e2e?.enabled) {
+      const e2eLogPath = `${logPrefix}.e2e.log`;
+      const res = await execCommand(config.tests.e2e.command || "echo 'e2e disabled'", process.cwd(), (config.tests.e2e.timeout_sec || 120) * 1000);
+      await fs.writeFile(e2eLogPath, res.stdout + res.stderr, 'utf-8');
+      stage.steps[0].test.e2e = {
+        status: res.code === 0 ? 'PASS' : 'FAIL',
+        command: config.tests.e2e.command || '',
+        log_path: path.relative(process.cwd(), e2eLogPath),
+        duration_ms: null,
+        failed_summary: res.code === 0 ? null : res.stderr.slice(0, 200)
+      };
+      if (res.code !== 0) {
+        stage.steps[0].status = 'FAILED';
+        status = 'NEEDS_INPUT';
+      }
+    } else {
+      stage.steps[0].test.e2e.status = 'SKIPPED';
+    }
 
     stage.steps[0].status = stage.steps[0].test.unit.status === 'FAIL' ? 'FAILED' : 'DONE';
     stage.steps[0].ended_at = isoNow();

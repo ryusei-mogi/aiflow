@@ -152,7 +152,8 @@ export async function buildRouter(configPath?: string) {
     const base = path.join(cachedConfig.paths.runs_dir, id, runId, 'logs');
     const map: Record<string, string> = {
       unit: path.join(base, 'step.S01.unit.log'),
-      qa: path.join(base, 'qa.log')
+      qa: path.join(base, 'qa.log'),
+      e2e: path.join(base, 'step.S01.e2e.log')
     };
     const target = map[kind];
     if (!target || !(await fs.pathExists(target))) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'log missing' } });

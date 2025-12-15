@@ -81,6 +81,7 @@ function RunPanel({ requestId }: { requestId: string | null }) {
   const [running, setRunning] = useState(false);
   const [steps, setSteps] = useState<any[]>([]);
   const [logs, setLogs] = useState<{unit?: string; qa?: string}>({});
+  const [logsE2E, setLogsE2E] = useState<string>('');
   const [qaIssues, setQaIssues] = useState<any[]>([]);
 
   const loadMessages = async () => {
@@ -125,6 +126,10 @@ function RunPanel({ requestId }: { requestId: string | null }) {
         const qaLog = await api(`/api/requests/${requestId}/runs/${runId}/logs/qa`);
         setLogs((prev) => ({ ...prev, qa: qaLog }));
       } catch { setLogs((prev) => ({ ...prev, qa: '' })); }
+      try {
+        const e2eLog = await api(`/api/requests/${requestId}/runs/${runId}/logs/e2e`);
+        setLogsE2E(typeof e2eLog === 'string' ? e2eLog : '');
+      } catch { setLogsE2E(''); }
     } catch {
       setStage(null);
       setReport('');
@@ -132,6 +137,7 @@ function RunPanel({ requestId }: { requestId: string | null }) {
       setSteps([]);
       setLogs({});
       setQaIssues([]);
+      setLogsE2E('');
     }
   };
 
@@ -227,6 +233,10 @@ function RunPanel({ requestId }: { requestId: string | null }) {
           <details>
             <summary>QA Log</summary>
             <pre>{logs.qa || 'No qa log'}</pre>
+          </details>
+          <details>
+            <summary>E2E Log</summary>
+            <pre>{logsE2E || 'No e2e log'}</pre>
           </details>
           {qaIssues.length > 0 && (
             <details open>
