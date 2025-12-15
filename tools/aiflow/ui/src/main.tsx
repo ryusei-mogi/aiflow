@@ -76,7 +76,18 @@ function RequestEditor({ request, onSave }: { request: any; onSave: (next: any) 
 function RunPanel({ requestId }: { requestId: string | null }) {
   const [stage, setStage] = useState<any | null>(null);
   const [report, setReport] = useState<string>('');
+  const [errors, setErrors] = useState<any | null>(null);
+  const [messages, setMessages] = useState<Record<string, any> | null>(null);
   const [running, setRunning] = useState(false);
+
+  const loadMessages = async () => {
+    try {
+      const m = await api('/api/messages');
+      setMessages(m.messages?.reason_codes || {});
+    } catch {
+      setMessages(null);
+    }
+  };
 
   const loadLatest = async () => {
     if (!requestId) return;
@@ -91,9 +102,16 @@ function RunPanel({ requestId }: { requestId: string | null }) {
       } catch (e) {
         setReport('');
       }
+      try {
+        const err = await api(`/api/requests/${requestId}/runs/${runId}/errors`);
+        setErrors(err.errors?.error || null);
+      } catch {
+        setErrors(null);
+      }
     } catch {
       setStage(null);
       setReport('');
+      setErrors(null);
     }
   };
 
@@ -109,7 +127,13 @@ function RunPanel({ requestId }: { requestId: string | null }) {
   };
 
   useEffect(() => {
+    loadMessages();
+  }, []);
+
+  useEffect(() => {
     loadLatest();
+    const timer = setInterval(loadLatest, 2000);
+    return () => clearInterval(timer);
   }, [requestId]);
 
   return (
@@ -126,6 +150,15 @@ function RunPanel({ requestId }: { requestId: string | null }) {
           <div><strong>Stage:</strong> {stage.stage}</div>
           <div><strong>Progress:</strong> {stage.progress?.percent}% - {stage.progress?.message}</div>
           <div><strong>Updated:</strong> {stage.updated_at}</div>
+          {errors && (
+            <div className="error-box">
+              <div><strong>Error:</strong> {errors.reason_code}</div>
+              <div>{messages?.[errors.reason_code]?.title || errors.title}</div>
+              <ul>
+                {(messages?.[errors.reason_code]?.actions || errors.actions || []).map((a: string) => <li key={a}>{a}</li>)}
+              </ul>
+            </div>
+          )}
         </div>
       ) : (
         <div>No run yet.</div>

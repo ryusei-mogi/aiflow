@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Quality Rules v1",
+  "type": "object",
+  "required": ["version", "gates"],
+  "properties": {
+    "version": { "type": "string", "const": "1.0" },
+    "gates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "severity", "check"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "severity": { "type": "string" },
+          "check": { "type": "object" }
+        }
+      }
+    }
+  },
+  "additionalProperties": true
+}

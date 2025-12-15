@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Quality Context v1",
+  "type": "object",
+  "required": ["version", "request", "run"],
+  "properties": {
+    "version": { "type": "string", "const": "1.0" },
+    "request": {
+      "type": "object",
+      "required": ["id", "meta"],
+      "properties": {
+        "id": { "type": "string" },
+        "meta": { "type": "object" }
+      }
+    },
+    "run": {
+      "type": "object",
+      "required": ["run_id", "started_at"],
+      "properties": {
+        "run_id": { "type": "string" },
+        "started_at": { "type": "string" }
+      }
+    }
+  },
+  "additionalProperties": true
+}

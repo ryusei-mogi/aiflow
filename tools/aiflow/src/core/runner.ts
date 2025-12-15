@@ -10,6 +10,7 @@ import fg from 'fast-glob';
 import { evaluateQualityGates } from './qualityGates.js';
 import { loadRouter } from './config.js';
 import { callLlm } from './router.js';
+import { validateIfExists } from './validate.js';
 
 const execAsync = util.promisify(exec);
 
@@ -282,7 +283,9 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
   }
   const planningPath = path.join(runDir, 'planning.json');
   await writePlanning(planningPath, planning);
+  await validateIfExists(planningPath, 'planning.contract.v1.json'); // best-effort; schema optional
   await writeQualityContext(contextPath, request, runId);
+  await validateIfExists(contextPath, 'quality-context.v1.schema.json');
 
   const stagePath = path.join(runDir, 'stage.json');
   const stage: StageFile = createStage(request.id, runId, config, planningPath);

@@ -152,5 +152,13 @@ export async function buildRouter(configPath?: string) {
     res.json({ router: await loadRouter(path.resolve('.aiflow/router.v1.json')) });
   });
 
+  // errors + message dictionary rendering helper (UI向け)
+  router.get('/messages', async (_req, res) => {
+    const dictPath = path.resolve('.aiflow/messages/messages.v1.ja.json');
+    if (!(await fs.pathExists(dictPath))) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'messages missing' } });
+    const messages = await fs.readJSON(dictPath);
+    res.json({ messages });
+  });
+
   return router;
 }
