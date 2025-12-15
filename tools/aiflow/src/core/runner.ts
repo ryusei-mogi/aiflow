@@ -275,6 +275,9 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
   // Try planner LLM
   try {
     attempts.planning += 1;
+    if (attempts.planning > MAX_RETRY_PER_ROLE) {
+      throw new Error('Planner retry limit exceeded');
+    }
     const tmpl = await readPrompt('planner.v1.md');
     const gatesJson = await fs.readFile(path.resolve('.aiflow/quality-gates.v1.json'), 'utf-8');
     const limitsJson = JSON.stringify(config.planning?.default_limits || planning.limits);
@@ -333,6 +336,9 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
     // Try implementer LLM
     try {
       attempts.implementer += 1;
+      if (attempts.implementer > MAX_RETRY_PER_ROLE) {
+        throw new Error('Implementer retry limit exceeded');
+      }
       process.stderr.write(chalk.gray(`Implementer role start run=${runId}\n`));
       const tmpl = await readPrompt('implementer.v1.md');
       const stepJson = JSON.stringify(planning.steps[0] || {}, null, 2);
@@ -400,6 +406,9 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
     if (stage.steps[0].status === 'DONE') {
       try {
         attempts.qa += 1;
+        if (attempts.qa > MAX_RETRY_PER_ROLE) {
+          throw new Error('QA retry limit exceeded');
+        }
         const qaPromptTmpl = await readPrompt('qa.v1.md');
         const diff = stage.artifacts.patches.join('\n');
         const unitLogExcerpt = unitLogPath ? (await fs.readFile(unitLogPath, 'utf-8')).slice(0, 1200) : '';
@@ -414,6 +423,7 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
         const qaRes = await callLlm(routerConfig, 'qa', qaPrompt, qaSchema);
         if (qaRes.ok && Array.isArray(qaRes.json?.issues)) {
           qaIssues = qaRes.json.issues;
+          stage.steps[0].qa_issues = qaIssues;
           if (qaRes.json.status === 'failed') {
             stage.error = makeError('QA_FAILED', 'QA reported issues', 'TEST');
             stage.steps[0].status = 'NEEDS_INPUT';
@@ -436,6 +446,10 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
     if (status !== 'DONE') {
       const err = stage.error ?? makeError('UNIT_TEST_FAILED', 'Unit tests failed or were skipped', 'TEST');
       await writeErrors(errorsPath, err);
+      stage.artifacts.errors_json = path.relative(process.cwd(), errorsPath);
+    } else if (qaIssues.length) {
+      // store QA issues also for UI
+      await writeErrors(errorsPath, makeError('QA_ISSUES', 'QA reported issues', 'TEST'));
       stage.artifacts.errors_json = path.relative(process.cwd(), errorsPath);
     }
 
@@ -537,6 +551,7 @@ type AttemptMap = {
 };
 
 const MAX_RETRY_PER_ROLE = 2;
+const MAX_STEP_RETRY = 3;
 
 async function tryGitPush(workBranch: string): Promise<{ ok: boolean; detail: string }> {
   try {

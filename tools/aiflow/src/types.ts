@@ -88,6 +88,7 @@ export type StepState = {
     e2e: StepTestResult;
   };
   error: ErrorObject | null;
+  qa_issues?: any[];
 };
 
 export type StageFile = {
