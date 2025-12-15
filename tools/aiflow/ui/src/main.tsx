@@ -170,6 +170,15 @@ function RunPanel({ requestId }: { requestId: string | null }) {
           <div><strong>Stage:</strong> {stage.stage}</div>
           <div><strong>Progress:</strong> {stage.progress?.percent}% - {stage.progress?.message}</div>
           <div><strong>Updated:</strong> {stage.updated_at}</div>
+          {stage.error && (
+            <div className="error-box">
+              <div><strong>Error:</strong> {stage.error.reason_code}</div>
+              <div>{messages?.[stage.error.reason_code]?.title || stage.error.title}</div>
+              <ul>
+                {(messages?.[stage.error.reason_code]?.actions || stage.error.actions || []).map((a: string) => <li key={a}>{a}</li>)}
+              </ul>
+            </div>
+          )}
           <div className="steps-grid">
             {steps.map((s) => (
               <div key={s.step_id} className={`step-card status-${s.status.toLowerCase()}`}>
