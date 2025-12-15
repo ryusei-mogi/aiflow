@@ -24,7 +24,7 @@ function useRequests() {
   useEffect(() => {
     load();
   }, []);
-  return { items, load, loading };
+  return { items, load, loading, setItems };
 }
 
 function RequestEditor({ request, onSave }: { request: any; onSave: (next: any) => void }) {
@@ -268,7 +268,16 @@ function App() {
       <aside>
         <div className="aside-header">
           <h2>Requests</h2>
-          <button onClick={load}>{loading ? '...' : 'Reload'}</button>
+          <div className="aside-actions">
+            <button onClick={async () => {
+              const title = window.prompt('Title for new request?', '');
+              if (!title) return;
+              const prio = window.prompt('Priority (P0-P3)?', 'P2') || 'P2';
+              await api('/api/requests', { method: 'POST', body: JSON.stringify({ title, priority: prio }) });
+              await load();
+            }}>{loading ? '...' : 'New'}</button>
+            <button onClick={load}>{loading ? '...' : 'Reload'}</button>
+          </div>
         </div>
         <div className="list">
           {items.map((r) => (

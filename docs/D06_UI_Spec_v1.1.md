@@ -24,7 +24,7 @@ Dashboard：一覧と優先度運用
 
 Request Detail：要望・Plan・Report・実行制御・ログ
 
-Create：新規作成
+Create：新規作成（v1.1実装：タイトル＋Priorityのみ。本文は作成後に編集）
 
 Doctor：環境チェック（任意だが推奨）
 
@@ -149,7 +149,7 @@ Want（Markdown）
 
 POST /requests
 
-成功後：/requests/:id へ遷移
+成功後：/requests/:id へ遷移（v1.1 UI実装では一覧をリロードして選択する）
 
 Wantが空でもD3必須構造は満たす（見出し骨子は自動挿入してよい）
 
@@ -464,4 +464,3 @@ done で Open PR が compare URL を開く
 running中の要望編集が防止される
 
 必要なら、このD6をそのまま実装に落とせるように、次は D10（Runner内部フェーズ仕様） か D11（設定仕様：ポート、ディレクトリ、実行プロファイル） を作るのが最短です。
-

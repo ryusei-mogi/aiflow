@@ -28,6 +28,7 @@ aside {
   align-items: center;
   padding: 16px;
 }
+.aside-actions { display: flex; gap: 8px; }
 
 .aside-header h2 { margin: 0; }
 
