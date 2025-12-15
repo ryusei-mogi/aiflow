@@ -526,6 +526,12 @@ async function tryGitApplyCheck(patchPath: string, root: string): Promise<{ ok: 
   }
 }
 
+type AttemptMap = {
+  planning: number;
+  implementer: number;
+  qa: number;
+};
+
 async function tryGitPush(workBranch: string): Promise<{ ok: boolean; detail: string }> {
   try {
     await execAsync(`git push -u origin ${workBranch}`);
