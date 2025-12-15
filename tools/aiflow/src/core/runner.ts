@@ -6,6 +6,8 @@ import { AiflowConfig } from './config.js';
 import { ParsedRequest, PlanningFile, RunnerResult, StageFile, ErrorObject } from '../types.js';
 import { parseRequest } from './meta.js';
 import { createStage, setError, setStage, writeStage } from './stage.js';
+import fg from 'fast-glob';
+import { evaluateQualityGates } from './qualityGates.js';
 
 const execAsync = util.promisify(exec);
 
@@ -163,6 +165,18 @@ async function applyPatch(patchPath: string, root: string): Promise<{ ok: boolea
   }
 }
 
+async function checkGhDependency(root: string): Promise<boolean> {
+  const entries = await fg(['**/*.{ts,js,tsx,jsx}', '**/*.md'], {
+    cwd: root,
+    ignore: ['node_modules', 'runs', '.aiflow', '.git']
+  });
+  for (const file of entries) {
+    const content = await fs.readFile(path.join(root, file), 'utf-8');
+    if (content.match(/\bgh\b/)) return false;
+  }
+  return true;
+}
+
 async function writeReport(reportPath: string, request: ParsedRequest, runId: string, unitLogPath: string | null, status: string, error?: ErrorObject) {
   const lines: string[] = [];
   lines.push(`# Run Report`);
@@ -288,7 +302,7 @@ export async function runRequest(requestId: string, config: AiflowConfig): Promi
     stage.steps[0].ended_at = isoNow();
 
     // Report
-    const status = stage.steps[0].status === 'FAILED' ? 'NEEDS_INPUT' : 'DONE';
+    let status = stage.steps[0].status === 'FAILED' ? 'NEEDS_INPUT' : 'DONE';
     setStage(stage, status === 'DONE' ? 'DONE' : 'NEEDS_INPUT', 'REPORTING', 'Reporting', 'Writing report', 90);
     const reportPath = path.join(runDir, 'report.md');
     await writeReport(reportPath, request, runId, unitLogPath, status, stage.error || undefined);
@@ -301,8 +315,17 @@ export async function runRequest(requestId: string, config: AiflowConfig): Promi
       stage.artifacts.errors_json = path.relative(process.cwd(), errorsPath);
     }
 
+    // Quality gates (D17-A)
+    const gatesPath = path.resolve(process.cwd(), '.aiflow/quality-gates.v1.json');
+    const gates = await evaluateQualityGates(process.cwd(), gatesPath, { request_id: request.id, run_id: runId });
+    const gateFailed = gates.some((g) => !g.passed);
+    if (gateFailed) {
+      status = 'NEEDS_INPUT';
+      stage.error = makeError('QUALITY_GATE_FAILED', 'One or more quality gates failed', 'EXECUTION');
+    }
+
     // Finalize
-    setStage(stage, status === 'DONE' ? 'DONE' : 'NEEDS_INPUT', 'END', status === 'DONE' ? 'Completed' : 'Needs input', 'Finished', 100);
+    setStage(stage, status === 'DONE' ? 'DONE' : 'NEEDS_INPUT', 'END', status === 'DONE' ? 'Completed' : 'Needs input', gateFailed ? 'Quality gate failed' : 'Finished', 100);
     stage.ended_at = isoNow();
     await writeStage(stagePath, stage);
 
