@@ -1,0 +1,19 @@
+{
+  "version": "1.0",
+  "mode": "no_token",
+  "cli_availability": {
+    "codex": { "required": false, "bin": "codex" },
+    "gemini": { "required": false, "bin": "gemini" }
+  },
+  "defaults": { "timeout_sec": 180, "max_retries_per_call": 1 },
+  "models": {
+    "codex": { "planner": "gpt-5.2", "implementer": "gpt-5.2", "qa": "gpt-5.2" },
+    "gemini": { "planner_fallback": "gemini-3-pro", "qa": "gemini-3-pro" }
+  },
+  "routing": {
+    "planner": { "primary": "codex", "fallback": "gemini" },
+    "implementer": { "primary": "codex", "fallback": "gemini" },
+    "qa": { "primary": "gemini", "fallback": "codex" }
+  },
+  "overrides": []
+}

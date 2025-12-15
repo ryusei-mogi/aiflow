@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Implementer Contract v1",
+  "type": "object",
+  "required": ["contract_version", "role", "status", "summary"],
+  "properties": {
+    "contract_version": { "type": "string", "const": "1.0" },
+    "role": { "type": "string", "const": "implementer" },
+    "status": { "type": "string", "enum": ["ok", "needs_input", "failed"] },
+    "summary": { "type": "string" },
+    "reason_code": { "type": "string" },
+    "patch": {
+      "type": ["object", "null"],
+      "properties": {
+        "format": { "type": "string" },
+        "diff": { "type": "string" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

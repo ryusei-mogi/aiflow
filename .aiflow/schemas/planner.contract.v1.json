@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Planner Contract v1",
+  "type": "object",
+  "required": ["contract_version", "role", "status", "summary"],
+  "properties": {
+    "contract_version": { "type": "string", "const": "1.0" },
+    "role": { "type": "string", "const": "planner" },
+    "status": { "type": "string", "enum": ["ok", "needs_input", "failed"] },
+    "summary": { "type": "string" },
+    "planning": { "type": ["object", "null"] }
+  },
+  "additionalProperties": true
+}

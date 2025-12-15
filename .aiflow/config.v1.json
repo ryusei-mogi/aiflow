@@ -1,0 +1,59 @@
+{
+  "version": "1.0",
+  "mode": "no_token",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 7331
+  },
+  "ui": {
+    "port": 7332,
+    "api_base": "http://localhost:7331"
+  },
+  "paths": {
+    "requests_dir": "requests",
+    "runs_dir": "runs",
+    "aiflow_dir": ".aiflow",
+    "locks_dir": ".aiflow/locks",
+    "cache_dir": ".aiflow/cache",
+    "tmp_dir": ".aiflow/tmp"
+  },
+  "repo": {
+    "base_branch": "main",
+    "work_branch_prefix": "ai/",
+    "require_clean_worktree": true,
+    "enforce_work_branch": false
+  },
+  "planning": {
+    "default_steps": { "min": 1, "max": 3, "hard_max": 5 },
+    "default_limits": { "max_diff_lines": 300, "max_files": 10, "max_minutes": 15 }
+  },
+  "runner": {
+    "poll_stage_ms": 1200,
+    "role_retry_max": 2,
+    "run_lock": { "enabled": true },
+    "lock_ttl_sec": 900
+  },
+  "git": {
+    "branch_prefix": "ai/",
+    "max_branch_len": 128,
+    "auto_push": false,
+    "auto_commit": false
+  },
+  "tests": {
+    "unit": { "enabled": true, "command": "echo 'no unit tests configured'", "timeout_sec": 60 },
+    "e2e": { "enabled": false, "command": "echo 'e2e disabled'", "timeout_sec": 120 }
+  },
+  "llm": {
+    "mode": "cli_only",
+    "router": {
+      "planner": "codex",
+      "implementer": "codex",
+      "qa": "claude"
+    },
+    "cli": {
+      "codex": { "enabled": false, "command": "codex", "model": "gpt-5.2", "effort": "xhigh" },
+      "claude": { "enabled": false, "command": "claude", "model": "sonnet", "output_format": "json" },
+      "gemini": { "enabled": false, "command": "gemini", "model": "gemini-3-pro", "output_format": "json" }
+    }
+  }
+}

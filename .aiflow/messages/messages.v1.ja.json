@@ -1,0 +1,59 @@
+{
+  "version": "1.0",
+  "reason_codes": {
+    "JSON_PARSE_ERROR": {
+      "title": "AI出力のJSONが壊れています",
+      "summary": "出力が単一JSONになっていないか、パース不能です。",
+      "actions": [
+        "runs/.../logs/ を確認し、出力がJSONだけか確認",
+        "プロンプトテンプレ(.aiflow/prompts)を見直す",
+        "再Run"
+      ]
+    },
+    "JSON_SCHEMA_INVALID": {
+      "title": "AI出力がContractに不一致です",
+      "summary": "Contractに合っていません。",
+      "actions": ["スキーマ必須項目を確認", "該当ロールを再実行"]
+    },
+    "RUN_IN_PROGRESS": {
+      "title": "同一RequestのRunが実行中です",
+      "summary": "二重実行を防止しています。",
+      "actions": ["Run詳細画面で進捗を確認", "完了後に再実行"]
+    },
+    "GIT_NOT_REPO": {
+      "title": "gitリポジトリではありません",
+      "summary": "このディレクトリはgit管理されていません。",
+      "actions": ["git init する", "正しいリポジトリで起動する"]
+    },
+    "WORKTREE_DIRTY": {
+      "title": "未コミット変更があります",
+      "summary": "差分混入を避けるため停止しました。",
+      "actions": ["git status を確認", "コミット/スタッシュしてから再Run"]
+    },
+    "ORIGIN_MISSING": {
+      "title": "origin が設定されていません",
+      "summary": "compare URLを作れません。",
+      "actions": ["git remote -v を確認", "origin を追加してから再Run"]
+    },
+    "REMOTE_NOT_GITHUB": {
+      "title": "GitHub以外のremoteです",
+      "summary": "v1はGitHub compare URLのみ対応です。",
+      "actions": ["GitHub remoteに切り替える", "compare URL生成をスキップして継続"]
+    },
+    "STEP_TOO_LARGE": {
+      "title": "Stepが大きすぎます",
+      "summary": "途中停止リスクが高いためplanningの分割が必要です。",
+      "actions": ["planningを再実行してStepを増やす", "targets.paths を絞る"]
+    },
+    "UNIT_TEST_FAILED": {
+      "title": "単体テストが失敗しました",
+      "summary": "修正が必要です。",
+      "actions": ["runs/.../logs/unit.log を確認", "失敗箇所を修正して再Run"]
+    },
+    "E2E_TEST_FAILED": {
+      "title": "E2Eテストが失敗しました",
+      "summary": "ブラウザ操作の期待結果に一致していません。",
+      "actions": ["runs/.../logs/e2e.log を確認", "UI/フロー差分を修正して再Run"]
+    }
+  }
+}

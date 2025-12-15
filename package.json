@@ -1,0 +1,12 @@
+{
+  "name": "aiflow-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": ["tools/aiflow"],
+  "scripts": {
+    "aiflow": "npm -w tools/aiflow run cli --",
+    "aiflow:dev": "npm -w tools/aiflow run dev --",
+    "aiflow:doctor": "npm -w tools/aiflow run doctor --",
+    "aiflow:ui": "npm -w tools/aiflow run ui --"
+  }
+}

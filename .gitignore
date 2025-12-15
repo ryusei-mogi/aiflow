@@ -1,0 +1,10 @@
+node_modules
+npm-debug.log*
+yarn-error.log
+pnpm-debug.log
+dist
+runs/
+.aiflow/locks/
+.aiflow/cache/
+.aiflow/tmp/
+.DS_Store

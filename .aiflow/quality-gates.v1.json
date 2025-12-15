@@ -1,0 +1,35 @@
+{
+  "version": "1.0",
+  "gates": [
+    {
+      "id": "G-01",
+      "name": "No gh dependency",
+      "severity": "Blocker",
+      "check": { "type": "string_absence", "paths": ["tools/aiflow/**"], "pattern": "\\bgh\\b" }
+    },
+    {
+      "id": "G-02",
+      "name": "Runs directory is gitignored",
+      "severity": "Major",
+      "check": { "type": "gitignore_contains", "path": ".gitignore", "line": "runs/" }
+    },
+    {
+      "id": "G-03",
+      "name": "Stage exists",
+      "severity": "Blocker",
+      "check": { "type": "file_exists", "path": "runs/{{request_id}}/{{run_id}}/stage.json" }
+    },
+    {
+      "id": "G-04",
+      "name": "Report exists",
+      "severity": "Blocker",
+      "check": { "type": "file_exists", "path": "runs/{{request_id}}/{{run_id}}/report.md" }
+    },
+    {
+      "id": "G-05",
+      "name": "Server health endpoint",
+      "severity": "Major",
+      "check": { "type": "http_status", "url": "http://localhost:7331/api/health", "status": 200 }
+    }
+  ]
+}
