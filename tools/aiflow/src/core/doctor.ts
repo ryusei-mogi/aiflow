@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs-extra';
 import { AiflowConfig } from './config.js';
 import { DoctorCheck, DoctorResult } from '../types.js';
+import { RouterConfig, loadRouter } from './config.js';
 
 const execAsync = util.promisify(exec);
 
@@ -42,6 +43,28 @@ async function checkBinary(bin: string, id: string, required = false): Promise<D
   }
 }
 
+function validateRouter(router: RouterConfig): DoctorCheck[] {
+  const checks: DoctorCheck[] = [];
+  const routing = router.routing || {};
+  const models = router.models || {};
+  for (const [role, cfg] of Object.entries(routing)) {
+    const provider = cfg.primary;
+    if (!provider) {
+      checks.push({ id: `router_${role}_provider`, title: `router ${role} primary missing`, status: 'FAIL' });
+      continue;
+    }
+    const model = models[provider]?.[role] || models[provider]?.[`${role}_fallback`];
+    if (!model) {
+      checks.push({ id: `router_${role}_model`, title: `router ${role} model missing`, status: 'FAIL' });
+    } else {
+      checks.push({ id: `router_${role}_model`, title: `router ${role} model ${provider}/${model}`, status: 'PASS' });
+    }
+    const bin = router.cli_availability?.[provider]?.bin || provider;
+    checks.push({ id: `router_${role}_bin`, title: `router ${role} bin ${bin}`, status: 'PASS' });
+  }
+  return checks;
+}
+
 export async function runDoctor(config: AiflowConfig, routerPath = path.resolve('.aiflow/router.v1.json')): Promise<DoctorResult> {
   const checks: DoctorCheck[] = [];
   checks.push({ id: 'node', title: 'Node present', status: 'PASS' });
@@ -54,11 +77,12 @@ export async function runDoctor(config: AiflowConfig, routerPath = path.resolve(
   // Router bins (best-effort)
   if (await fs.pathExists(routerPath)) {
     try {
-      const router = await fs.readJSON(routerPath);
+      const router = await loadRouter(routerPath);
       const availability = router.cli_availability || {};
       for (const [key, info] of Object.entries(availability)) {
         checks.push(await checkBinary(info.bin || key, `cli_${key}`, info.required ?? false));
       }
+      checks.push(...validateRouter(router));
     } catch (e: any) {
       checks.push({ id: 'router_parse', title: 'router.v1.json parse error', status: 'WARN', detail: String(e.message) });
     }
