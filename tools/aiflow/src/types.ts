@@ -58,6 +58,12 @@ export type ErrorObject = {
   meta?: Record<string, unknown>;
 };
 
+export type QAIssue = {
+  severity?: string;
+  description?: string;
+  hint?: string;
+};
+
 export type StepTestResult = {
   status: "NOT_RUN" | "RUNNING" | "PASS" | "FAIL" | "SKIPPED";
   command: string | null;

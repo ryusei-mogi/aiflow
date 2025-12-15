@@ -3,7 +3,7 @@ import path from 'path';
 import { exec } from 'child_process';
 import util from 'util';
 import { AiflowConfig } from './config.js';
-import { ParsedRequest, PlanningFile, RunnerResult, StageFile, ErrorObject } from '../types.js';
+import { ParsedRequest, PlanningFile, RunnerResult, StageFile, ErrorObject, QAIssue } from '../types.js';
 import { parseRequest } from './meta.js';
 import { createStage, setError, setStage, writeStage } from './stage.js';
 import fg from 'fast-glob';
@@ -248,6 +248,7 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
   const routerConfig = await loadRouter(path.resolve('.aiflow/router.v1.json'));
   const runId = runIdOverride || makeRunId();
   const attempts: AttemptMap = { planning: 0, implementer: 0, qa: 0 };
+  const stepRetries: Record<string, number> = { S01: 0 };
   const runDir = path.join(config.paths.runs_dir, request.id, runId);
   const logsDir = path.join(runDir, 'logs');
   const patchesDir = path.join(runDir, 'patches');
@@ -373,8 +374,12 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
     if (!applyCheck.ok) {
       const err = makeError('PATCH_APPLY_FAILED', applyCheck.detail, 'GIT');
       stage.error = err;
-      stage.steps[0].status = 'FAILED';
+      stage.steps[0].status = 'NEEDS_INPUT';
       status = 'NEEDS_INPUT';
+      stepRetries.S01 += 1;
+      if (stepRetries.S01 > MAX_STEP_RETRY) {
+        stage.error = makeError('RETRY_LIMIT_EXCEEDED', 'Step retry limit exceeded', 'EXECUTION');
+      }
     } else {
       await applyPatch(patchPath, process.cwd());
     }
@@ -422,12 +427,13 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
         const qaSchema = path.resolve('.aiflow/schemas/qa.contract.v1.json');
         const qaRes = await callLlm(routerConfig, 'qa', qaPrompt, qaSchema);
         if (qaRes.ok && Array.isArray(qaRes.json?.issues)) {
-          qaIssues = qaRes.json.issues;
+          qaIssues = qaRes.json.issues as QAIssue[];
           stage.steps[0].qa_issues = qaIssues;
           if (qaRes.json.status === 'failed') {
             stage.error = makeError('QA_FAILED', 'QA reported issues', 'TEST');
             stage.steps[0].status = 'NEEDS_INPUT';
             status = 'NEEDS_INPUT';
+            stepRetries.S01 += 1;
           }
         }
       } catch {
@@ -460,6 +466,7 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
     if (gateFailed) {
       status = 'NEEDS_INPUT';
       stage.error = makeError('QUALITY_GATE_FAILED', 'One or more quality gates failed', 'EXECUTION');
+      stepRetries.S01 += 1;
     }
 
     // Compare URL (no gh)
@@ -476,6 +483,10 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
     }
 
     // Finalize
+    if (stepRetries.S01 > MAX_STEP_RETRY) {
+      status = 'NEEDS_INPUT';
+      stage.error = makeError('RETRY_LIMIT_EXCEEDED', 'Step retry limit exceeded', 'EXECUTION');
+    }
     setStage(stage, status === 'DONE' ? 'DONE' : 'NEEDS_INPUT', 'END', status === 'DONE' ? 'Completed' : 'Needs input', gateFailed ? 'Quality gate failed' : 'Finished', 100);
     stage.ended_at = isoNow();
     await writeStage(stagePath, stage);
