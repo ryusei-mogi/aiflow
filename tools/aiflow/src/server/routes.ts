@@ -6,7 +6,7 @@ import { runDoctor } from '../core/doctor.js';
 import { listRequests, getRequestById, createRequest } from '../core/requests.js';
 import { parseRequest, updateRequestMeta, saveRequestMarkdown } from '../core/meta.js';
 import { latestRun, listRunsForRequest, loadStage } from '../core/runs.js';
-import { runRequest } from '../core/runner.js';
+import { runRequest, makeRunId } from '../core/runner.js';
 import { RunnerResult } from '../types.js';
 
 export async function buildRouter(configPath?: string) {
@@ -92,13 +92,15 @@ export async function buildRouter(configPath?: string) {
 
   router.post('/requests/:id/run', async (req, res) => {
     const requestId = req.params.id;
+    const runId = req.body?.run_id || makeRunId();
     try {
-      const result: RunnerResult = await runRequest(requestId, cachedConfig);
-      res.status(result.ok ? 202 : 409).json({
-        request_id: result.request_id,
-        run_id: result.run_id,
-        status: result.ok ? 'done' : 'needs_input',
-        error: result.error
+      // fire and forget: run in background
+      setImmediate(async () => {
+        await runRequest(requestId, cachedConfig, runId);
+      });
+      res.status(202).json({
+        request_id: requestId,
+        run_id: runId
       });
     } catch (e: any) {
       res.status(500).json({ error: { code: 'INTERNAL', message: e.message || String(e) } });

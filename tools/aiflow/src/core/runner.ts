@@ -8,6 +8,8 @@ import { parseRequest } from './meta.js';
 import { createStage, setError, setStage, writeStage } from './stage.js';
 import fg from 'fast-glob';
 import { evaluateQualityGates } from './qualityGates.js';
+import { loadRouter } from './config.js';
+import { callLlm } from './router.js';
 
 const execAsync = util.promisify(exec);
 
@@ -15,7 +17,7 @@ function isoNow() {
   return new Date().toISOString();
 }
 
-function makeRunId() {
+export function makeRunId() {
   const now = new Date();
   const pad = (n: number) => n.toString().padStart(2, '0');
   return `RUN-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}-${Math.random().toString(16).slice(2, 8)}`;
@@ -154,6 +156,20 @@ async function generatePatch(runDir: string, requestId: string, runId: string) {
   return { patchContent: patch, targetPath };
 }
 
+async function readPrompt(name: string): Promise<string> {
+  const localPath = path.resolve('.aiflow/prompts', name);
+  if (await fs.pathExists(localPath)) return fs.readFile(localPath, 'utf-8');
+  return '';
+}
+
+function fill(template: string, vars: Record<string, string>): string {
+  let out = template;
+  for (const [k, v] of Object.entries(vars)) {
+    out = out.replace(new RegExp(`{{${k}}}`, 'g'), v);
+  }
+  return out;
+}
+
 async function applyPatch(patchPath: string, root: string): Promise<{ ok: boolean; output: string }>
 {
   try {
@@ -221,13 +237,14 @@ async function writeQualityContext(contextPath: string, request: ParsedRequest, 
   await fs.writeJson(contextPath, payload, { spaces: 2 });
 }
 
-export async function runRequest(requestId: string, config: AiflowConfig): Promise<RunnerResult> {
+export async function runRequest(requestId: string, config: AiflowConfig, runIdOverride?: string): Promise<RunnerResult> {
   const requestPath = path.join(config.paths.requests_dir, `${requestId}.md`);
   if (!(await fs.pathExists(requestPath))) {
     throw new Error(`Request not found: ${requestId}`);
   }
   const request = await parseRequest(requestPath);
-  const runId = makeRunId();
+  const routerConfig = await loadRouter(path.resolve('.aiflow/router.v1.json'));
+  const runId = runIdOverride || makeRunId();
   const runDir = path.join(config.paths.runs_dir, request.id, runId);
   const logsDir = path.join(runDir, 'logs');
   const patchesDir = path.join(runDir, 'patches');
@@ -243,7 +260,26 @@ export async function runRequest(requestId: string, config: AiflowConfig): Promi
 
   const patchPath = path.join(patchesDir, 'S01.patch');
   const logPrefix = path.join(logsDir, 'step.S01');
-  const planning = buildPlanning(request, runId, config, patchPath, logPrefix);
+  let planning = buildPlanning(request, runId, config, patchPath, logPrefix);
+  // Try planner LLM
+  try {
+    const tmpl = await readPrompt('planner.v1.md');
+    const gatesJson = await fs.readFile(path.resolve('.aiflow/quality-gates.v1.json'), 'utf-8');
+    const limitsJson = JSON.stringify(config.planning?.default_limits || planning.limits);
+    const prompt = fill(tmpl, {
+      constraints: '- local_only\n- no_gh\n- git_ok',
+      quality_gates_json: gatesJson,
+      planning_limits_json: limitsJson,
+      request_markdown: request.raw
+    });
+    const plannerSchema = path.resolve('.aiflow/schemas/planner.contract.v1.json');
+    const plannerRes = await callLlm(routerConfig, 'planner', prompt, plannerSchema);
+    if (plannerRes.ok && plannerRes.json?.planning) {
+      planning = { ...planning, ...(plannerRes.json.planning as PlanningFile), request_id: request.id, run_id: runId };
+    }
+  } catch {
+    // fallback to built-in planning
+  }
   const planningPath = path.join(runDir, 'planning.json');
   await writePlanning(planningPath, planning);
   await writeQualityContext(contextPath, request, runId);
@@ -257,6 +293,10 @@ export async function runRequest(requestId: string, config: AiflowConfig): Promi
   await writeStage(stagePath, stage);
 
   try {
+    if (config.repo?.enforce_work_branch) {
+      await ensureWorkBranch(planning.base_branch, planning.work_branch);
+    }
+
     // Planning phase
     setStage(stage, 'RUNNING', 'PLANNING', 'Planning', 'Generating planning.json', 10);
     await writeStage(stagePath, stage);
@@ -268,7 +308,30 @@ export async function runRequest(requestId: string, config: AiflowConfig): Promi
     stage.steps[0].started_at = isoNow();
     await writeStage(stagePath, stage);
 
-    const { patchContent } = await generatePatch(runDir, request.id, runId);
+    let patchContent: string | null = null;
+    // Try implementer LLM
+    try {
+      const tmpl = await readPrompt('implementer.v1.md');
+      const stepJson = JSON.stringify(planning.steps[0] || {}, null, 2);
+      const targets = await fg(['**/*.*'], { cwd: process.cwd(), ignore: ['node_modules', 'runs', '.git', '.aiflow'] });
+      const snapshot = targets.slice(0, 50).join('\n');
+      const prompt = fill(tmpl, {
+        constraints: '- keep diff small\n- no gh command\n',
+        step_json: stepJson,
+        targets_snapshot: snapshot
+      });
+      const implSchema = path.resolve('.aiflow/schemas/implementer.contract.v1.json');
+      const implRes = await callLlm(routerConfig, 'implementer', prompt, implSchema);
+      if (implRes.ok && implRes.json?.patch?.diff) {
+        patchContent = implRes.json.patch.diff as string;
+      }
+    } catch {
+      // ignore and fallback
+    }
+    if (!patchContent) {
+      const placeholder = await generatePatch(runDir, request.id, runId);
+      patchContent = placeholder.patchContent;
+    }
     await fs.writeFile(patchPath, patchContent, 'utf-8');
     const relPatch = path.relative(process.cwd(), patchPath);
     stage.artifacts.patches.push(relPatch);
@@ -324,6 +387,10 @@ export async function runRequest(requestId: string, config: AiflowConfig): Promi
       stage.error = makeError('QUALITY_GATE_FAILED', 'One or more quality gates failed', 'EXECUTION');
     }
 
+    // Compare URL (no gh)
+    const compareUrl = await buildCompareUrl(planning.base_branch, planning.work_branch);
+    stage.artifacts.compare_url = compareUrl;
+
     // Finalize
     setStage(stage, status === 'DONE' ? 'DONE' : 'NEEDS_INPUT', 'END', status === 'DONE' ? 'Completed' : 'Needs input', gateFailed ? 'Quality gate failed' : 'Finished', 100);
     stage.ended_at = isoNow();
@@ -349,5 +416,37 @@ export async function runRequest(requestId: string, config: AiflowConfig): Promi
     await writeStage(stagePath, stage);
     await releaseLock(lockPath);
     return { ok: false, request_id: request.id, run_id: runId, stage_path: stagePath, planning_path: planningPath, report_path: path.join(runDir, 'report.md'), patches: [], error };
+  }
+}
+
+async function ensureWorkBranch(baseBranch: string, workBranch: string): Promise<void> {
+  try {
+    const { stdout } = await execAsync('git rev-parse --abbrev-ref HEAD');
+    const current = stdout.trim();
+    if (current === workBranch) return;
+    if (current === baseBranch) {
+      try {
+        await execAsync(`git checkout -B ${workBranch}`);
+      } catch {
+        // if checkout fails, leave as is
+      }
+    }
+  } catch {
+    // not a git repo; ignore
+  }
+}
+
+async function buildCompareUrl(baseBranch: string, workBranch: string): Promise<string | null> {
+  try {
+    const { stdout: remote } = await execAsync('git remote get-url origin');
+    const url = remote.trim();
+    const re = new RegExp('github\\.com[:/](.+?)/([^/.]+)(\\.git)?$');
+    const match = url.match(re);
+    if (!match) return null;
+    const owner = match[1];
+    const repo = match[2];
+    return `https://github.com/${owner}/${repo}/compare/${baseBranch}...${workBranch}?expand=1`;
+  } catch {
+    return null;
   }
 }

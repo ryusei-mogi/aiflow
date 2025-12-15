@@ -51,6 +51,7 @@ export type RouterConfig = {
   models?: Record<string, Record<string, string>>;
   routing?: Record<string, { primary: string; fallback?: string }>;
   overrides?: Array<{ when: Record<string, string>; use: string }>;
+  commands?: Record<string, { bin?: string; args?: string[] }>;
 };
 
 const DEFAULT_CONFIG: AiflowConfig = {
