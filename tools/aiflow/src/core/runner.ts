@@ -247,6 +247,7 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
   const request = await parseRequest(requestPath);
   const routerConfig = await loadRouter(path.resolve('.aiflow/router.v1.json'));
   const runId = runIdOverride || makeRunId();
+  const attempts: AttemptMap = { planning: 0, implementer: 0, qa: 0 };
   const runDir = path.join(config.paths.runs_dir, request.id, runId);
   const logsDir = path.join(runDir, 'logs');
   const patchesDir = path.join(runDir, 'patches');
@@ -273,6 +274,7 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
   let planning = buildPlanning(request, runId, config, patchPath, logPrefix);
   // Try planner LLM
   try {
+    attempts.planning += 1;
     const tmpl = await readPrompt('planner.v1.md');
     const gatesJson = await fs.readFile(path.resolve('.aiflow/quality-gates.v1.json'), 'utf-8');
     const limitsJson = JSON.stringify(config.planning?.default_limits || planning.limits);
@@ -330,6 +332,7 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
     let patchContent: string | null = null;
     // Try implementer LLM
     try {
+      attempts.implementer += 1;
       process.stderr.write(chalk.gray(`Implementer role start run=${runId}\n`));
       const tmpl = await readPrompt('implementer.v1.md');
       const stepJson = JSON.stringify(planning.steps[0] || {}, null, 2);
@@ -396,6 +399,7 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
     // QA role (log/diff要約)
     if (stage.steps[0].status === 'DONE') {
       try {
+        attempts.qa += 1;
         const qaPromptTmpl = await readPrompt('qa.v1.md');
         const diff = stage.artifacts.patches.join('\n');
         const unitLogExcerpt = unitLogPath ? (await fs.readFile(unitLogPath, 'utf-8')).slice(0, 1200) : '';
@@ -472,7 +476,7 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
       planning_path: path.relative(process.cwd(), planningPath),
       report_path: path.relative(process.cwd(), reportPath),
       patches: [path.relative(process.cwd(), patchPath)],
-      error: status === 'DONE' ? undefined : makeError('UNIT_TEST_FAILED', 'Unit tests failed or were skipped', 'TEST')
+      error: status === 'DONE' ? undefined : (stage.error || makeError('UNIT_TEST_FAILED', 'Unit tests failed or were skipped', 'TEST'))
     };
   } catch (e: any) {
     const error = makeError('INTERNAL_ERROR', e.message || String(e));
@@ -531,6 +535,8 @@ type AttemptMap = {
   implementer: number;
   qa: number;
 };
+
+const MAX_RETRY_PER_ROLE = 2;
 
 async function tryGitPush(workBranch: string): Promise<{ ok: boolean; detail: string }> {
   try {
