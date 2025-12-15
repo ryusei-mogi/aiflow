@@ -40,6 +40,16 @@ export async function buildRouter(configPath?: string) {
     const list = await listRequests(cachedConfig.paths.requests_dir, { priority: req.query.priority as string, q: req.query.q as string });
     const withRuns = await Promise.all(list.map(async (r) => {
       const latest = await latestRun(cachedConfig.paths.runs_dir, r.id);
+      let latest_error: string | null = null;
+      if (latest) {
+        const errorsPath = path.join(cachedConfig.paths.runs_dir, r.id, latest.run_id, 'errors.json');
+        if (await fs.pathExists(errorsPath)) {
+          try {
+            const errors = await fs.readJSON(errorsPath);
+            latest_error = errors.error?.reason_code || null;
+          } catch {}
+        }
+      }
       return {
         id: r.id,
         path: r.path,
@@ -48,7 +58,8 @@ export async function buildRouter(configPath?: string) {
         status: r.meta.status,
         updated_at: r.meta.updated_at,
         meta: r.meta,
-        latest_run: latest
+        latest_run: latest,
+        latest_error
       };
     }));
     res.json({ requests: withRuns });

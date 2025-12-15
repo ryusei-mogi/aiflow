@@ -283,7 +283,7 @@ function App() {
           {items.map((r) => (
             <button key={r.id} className={`list-item ${selected?.id === r.id ? 'active' : ''}`} onClick={() => select(r.id)}>
               <div className="title">{r.title}</div>
-              <div className="meta">{r.priority} · {r.status}</div>
+              <div className="meta">{r.priority} · {r.status}{r.latest_error ? ` · ${r.latest_error}` : ''}</div>
             </button>
           ))}
         </div>
