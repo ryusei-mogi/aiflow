@@ -114,3 +114,5 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   max-height: 240px;
   overflow: auto;
 }
+.compare { margin-top: 8px; }
+.compare a { color: #2563eb; font-weight: 600; text-decoration: none; }

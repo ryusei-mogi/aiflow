@@ -360,7 +360,15 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
     // Apply
     setStage(stage, 'RUNNING', 'APPLYING', 'Applying', 'Applying patch (best-effort)', 45);
     await writeStage(stagePath, stage);
-    await applyPatch(patchPath, process.cwd());
+    const applyCheck = await tryGitApplyCheck(patchPath, process.cwd());
+    if (!applyCheck.ok) {
+      const err = makeError('PATCH_APPLY_FAILED', applyCheck.detail, 'GIT');
+      stage.error = err;
+      stage.steps[0].status = 'FAILED';
+      status = 'NEEDS_INPUT';
+    } else {
+      await applyPatch(patchPath, process.cwd());
+    }
 
     // Tests
     setStage(stage, 'RUNNING', 'TESTING', 'Testing', 'Running unit tests', 65);
@@ -440,6 +448,15 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
     const compareUrl = await buildCompareUrl(planning.base_branch, planning.work_branch);
     stage.artifacts.compare_url = compareUrl;
 
+    // optional push (no gh)
+    if (config.git?.auto_push) {
+      const pushRes = await tryGitPush(planning.work_branch);
+      if (!pushRes.ok) {
+        status = 'NEEDS_INPUT';
+        stage.error = makeError('GIT_PUSH_FAILED', pushRes.detail, 'GIT');
+      }
+    }
+
     // Finalize
     setStage(stage, status === 'DONE' ? 'DONE' : 'NEEDS_INPUT', 'END', status === 'DONE' ? 'Completed' : 'Needs input', gateFailed ? 'Quality gate failed' : 'Finished', 100);
     stage.ended_at = isoNow();
@@ -497,5 +514,23 @@ async function buildCompareUrl(baseBranch: string, workBranch: string): Promise<
     return `https://github.com/${owner}/${repo}/compare/${baseBranch}...${workBranch}?expand=1`;
   } catch {
     return null;
+  }
+}
+
+async function tryGitApplyCheck(patchPath: string, root: string): Promise<{ ok: boolean; detail: string }> {
+  try {
+    await execAsync(`git apply --check ${patchPath}`, { cwd: root });
+    return { ok: true, detail: 'git apply --check ok' };
+  } catch (e: any) {
+    return { ok: false, detail: e.stderr || e.message };
+  }
+}
+
+async function tryGitPush(workBranch: string): Promise<{ ok: boolean; detail: string }> {
+  try {
+    await execAsync(`git push -u origin ${workBranch}`);
+    return { ok: true, detail: 'pushed' };
+  } catch (e: any) {
+    return { ok: false, detail: e.stderr || e.message };
   }
 }

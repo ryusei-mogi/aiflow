@@ -178,6 +178,11 @@ function RunPanel({ requestId }: { requestId: string | null }) {
       <div className="report">
         <h4>Report</h4>
         <pre>{report}</pre>
+        {stage?.artifacts?.compare_url && (
+          <div className="compare">
+            <a href={stage.artifacts.compare_url} target="_blank" rel="noreferrer">Compare URL</a>
+          </div>
+        )}
       </div>
     </div>
   );
