@@ -147,6 +147,20 @@ export async function buildRouter(configPath?: string) {
     res.send(md);
   });
 
+  router.get('/requests/:id/runs/:runId/logs/:kind', async (req, res) => {
+    const { id, runId, kind } = req.params;
+    const base = path.join(cachedConfig.paths.runs_dir, id, runId, 'logs');
+    const map: Record<string, string> = {
+      unit: path.join(base, 'step.S01.unit.log'),
+      qa: path.join(base, 'qa.log')
+    };
+    const target = map[kind];
+    if (!target || !(await fs.pathExists(target))) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'log missing' } });
+    const txt = await fs.readFile(target, 'utf-8');
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.send(txt);
+  });
+
   // Router config (read-only)
   router.get('/router', async (_req, res) => {
     res.json({ router: await loadRouter(path.resolve('.aiflow/router.v1.json')) });

@@ -80,6 +80,7 @@ function RunPanel({ requestId }: { requestId: string | null }) {
   const [messages, setMessages] = useState<Record<string, any> | null>(null);
   const [running, setRunning] = useState(false);
   const [steps, setSteps] = useState<any[]>([]);
+  const [logs, setLogs] = useState<{unit?: string; qa?: string}>({});
 
   const loadMessages = async () => {
     try {
@@ -110,11 +111,20 @@ function RunPanel({ requestId }: { requestId: string | null }) {
       } catch {
         setErrors(null);
       }
+      try {
+        const unitLog = await api(`/api/requests/${requestId}/runs/${runId}/logs/unit`);
+        setLogs((prev) => ({ ...prev, unit: unitLog }));
+      } catch { setLogs((prev) => ({ ...prev, unit: '' })); }
+      try {
+        const qaLog = await api(`/api/requests/${requestId}/runs/${runId}/logs/qa`);
+        setLogs((prev) => ({ ...prev, qa: qaLog }));
+      } catch { setLogs((prev) => ({ ...prev, qa: '' })); }
     } catch {
       setStage(null);
       setReport('');
       setErrors(null);
       setSteps([]);
+      setLogs({});
     }
   };
 
@@ -193,6 +203,16 @@ function RunPanel({ requestId }: { requestId: string | null }) {
             <a href={stage.artifacts.compare_url} target="_blank" rel="noreferrer">Compare URL</a>
           </div>
         )}
+        <div className="logs">
+          <details>
+            <summary>Unit Log</summary>
+            <pre>{logs.unit || 'No unit log'}</pre>
+          </details>
+          <details>
+            <summary>QA Log</summary>
+            <pre>{logs.qa || 'No qa log'}</pre>
+          </details>
+        </div>
       </div>
     </div>
   );

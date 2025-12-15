@@ -424,6 +424,7 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
         const qaPromptTmpl = await readPrompt('qa.v1.md');
         const diff = stage.artifacts.patches.join('\n');
         const unitLogExcerpt = unitLogPath ? (await fs.readFile(unitLogPath, 'utf-8')).slice(0, 1200) : '';
+        const qaLogPath = path.join(logsDir, 'qa.log');
         const qaPrompt = fill(qaPromptTmpl, {
           constraints: '- summarize diff and test\n',
           acceptance_criteria_json: JSON.stringify(planning.context.acceptance_criteria || []),
@@ -433,6 +434,7 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
         });
         const qaSchema = path.resolve('.aiflow/schemas/qa.contract.v1.json');
         const qaRes = await callLlm(routerConfig, 'qa', qaPrompt, qaSchema);
+        await fs.writeFile(qaLogPath, qaRes.ok ? JSON.stringify(qaRes.json, null, 2) : qaRes.raw || 'qa error', 'utf-8');
         if (qaRes.ok && Array.isArray(qaRes.json?.issues)) {
           qaIssues = qaRes.json.issues as QAIssue[];
           stage.steps[0].qa_issues = qaIssues;
