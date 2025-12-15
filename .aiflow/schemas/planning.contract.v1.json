@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Planning Contract v1 (minimal)",
+  "type": "object",
+  "required": ["version", "request_id", "run_id", "steps", "gates", "limits"],
+  "properties": {
+    "version": { "type": "string", "const": "1.0" },
+    "request_id": { "type": "string" },
+    "run_id": { "type": "string" },
+    "created_at": { "type": "string" },
+    "base_branch": { "type": "string" },
+    "work_branch": { "type": "string" },
+    "limits": {
+      "type": "object",
+      "required": ["max_diff_lines", "timeout_sec", "max_steps_per_run", "max_autofix_cycles"],
+      "properties": {
+        "max_diff_lines": { "type": "number" },
+        "max_files_changed": { "type": "number" },
+        "timeout_sec": { "type": "number" },
+        "max_steps_per_run": { "type": "number" },
+        "max_autofix_cycles": { "type": "number" }
+      }
+    },
+    "context": { "type": "object" },
+    "gates": { "type": "object" },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["step_id", "title", "role", "scope", "outputs"],
+        "properties": {
+          "step_id": { "type": "string", "pattern": "^S\\d{2}$" },
+          "title": { "type": "string" },
+          "role": { "type": "string" },
+          "scope": { "type": "object" },
+          "outputs": { "type": "object" }
+        }
+      }
+    },
+    "outputs": { "type": "object" }
+  },
+  "additionalProperties": true
+}

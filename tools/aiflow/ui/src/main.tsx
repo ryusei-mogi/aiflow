@@ -79,6 +79,7 @@ function RunPanel({ requestId }: { requestId: string | null }) {
   const [errors, setErrors] = useState<any | null>(null);
   const [messages, setMessages] = useState<Record<string, any> | null>(null);
   const [running, setRunning] = useState(false);
+  const [steps, setSteps] = useState<any[]>([]);
 
   const loadMessages = async () => {
     try {
@@ -96,6 +97,7 @@ function RunPanel({ requestId }: { requestId: string | null }) {
       const runId = latest.run.run_id;
       const stageResp = await api(`/api/requests/${requestId}/runs/${runId}/stage`);
       setStage(stageResp.stage);
+      setSteps(stageResp.stage?.steps || []);
       try {
         const reportText = await api(`/api/requests/${requestId}/runs/${runId}/report`);
         setReport(typeof reportText === 'string' ? reportText : '');
@@ -112,6 +114,7 @@ function RunPanel({ requestId }: { requestId: string | null }) {
       setStage(null);
       setReport('');
       setErrors(null);
+      setSteps([]);
     }
   };
 
@@ -150,6 +153,15 @@ function RunPanel({ requestId }: { requestId: string | null }) {
           <div><strong>Stage:</strong> {stage.stage}</div>
           <div><strong>Progress:</strong> {stage.progress?.percent}% - {stage.progress?.message}</div>
           <div><strong>Updated:</strong> {stage.updated_at}</div>
+          <div className="steps-grid">
+            {steps.map((s) => (
+              <div key={s.step_id} className={`step-card status-${s.status.toLowerCase()}`}>
+                <div className="step-title">{s.step_id}: {s.title}</div>
+                <div className="step-status">{s.status}</div>
+                <div className="step-summary">{s.summary}</div>
+              </div>
+            ))}
+          </div>
           {errors && (
             <div className="error-box">
               <div><strong>Error:</strong> {errors.reason_code}</div>

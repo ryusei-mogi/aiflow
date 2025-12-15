@@ -10,7 +10,7 @@ import fg from 'fast-glob';
 import { evaluateQualityGates } from './qualityGates.js';
 import { loadRouter } from './config.js';
 import { callLlm } from './router.js';
-import { validateIfExists } from './validate.js';
+import { validateIfExists, validateSchemaFile } from './validate.js';
 
 const execAsync = util.promisify(exec);
 
@@ -261,6 +261,14 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
 
   const patchPath = path.join(patchesDir, 'S01.patch');
   const logPrefix = path.join(logsDir, 'step.S01');
+  // quality-gates schema check upfront
+  const qualityRulesPath = path.resolve('.aiflow/quality-gates.v1.json');
+  const rulesValid = await validateSchemaFile(qualityRulesPath, 'quality-rules.v1.schema.json');
+  if (!rulesValid.ok) {
+    const error = makeError('CONFIG_INVALID', `quality-gates schema error: ${rulesValid.errors}`, 'INPUT');
+    return { ok: false, request_id: request.id, run_id: runId, stage_path: '', planning_path: '', report_path: '', patches: [], error };
+  }
+
   let planning = buildPlanning(request, runId, config, patchPath, logPrefix);
   // Try planner LLM
   try {
@@ -283,7 +291,14 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
   }
   const planningPath = path.join(runDir, 'planning.json');
   await writePlanning(planningPath, planning);
-  await validateIfExists(planningPath, 'planning.contract.v1.json'); // best-effort; schema optional
+  const planningValid = await validateIfExists(planningPath, 'planning.contract.v1.json');
+  if (!planningValid.ok) {
+    const error = makeError('JSON_SCHEMA_INVALID', `planning.json schema error: ${planningValid.errors}`, 'CONTRACT');
+    setError(createStage(request.id, runId, config, planningPath), error);
+    await writeErrors(path.join(runDir, 'errors.json'), error);
+    await releaseLock(lockPath);
+    return { ok: false, request_id: request.id, run_id: runId, stage_path: planningPath, planning_path: planningPath, report_path: '', patches: [], error };
+  }
   await writeQualityContext(contextPath, request, runId);
   await validateIfExists(contextPath, 'quality-context.v1.schema.json');
 

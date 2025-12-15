@@ -27,3 +27,9 @@ export async function validateIfExists(targetPath: string, schemaName: string): 
   if (!(await fs.pathExists(targetPath))) return { ok: true };
   return validateWithSchema(targetPath, schemaPath);
 }
+
+export async function validateSchemaFile(targetPath: string, schemaName: string): Promise<{ ok: boolean; errors?: string }> {
+  const schemaPath = path.resolve('.aiflow/schemas', schemaName);
+  if (!(await fs.pathExists(targetPath))) return { ok: false, errors: 'file missing' };
+  return validateWithSchema(targetPath, schemaPath);
+}
