@@ -295,6 +295,12 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
     }
   } catch {
     // fallback to built-in planning
+    if (attempts.planning > MAX_RETRY_PER_ROLE) {
+      const error = makeError(MAX_RETRY_REASON, 'Planner retry limit exceeded', 'EXECUTION');
+      await writeErrors(path.join(runDir, 'errors.json'), error);
+      await releaseLock(lockPath);
+      return { ok: false, request_id: request.id, run_id: runId, stage_path: '', planning_path: planningPath, report_path: '', patches: [], error };
+    }
   }
   const planningPath = path.join(runDir, 'planning.json');
   await writePlanning(planningPath, planning);
@@ -378,7 +384,8 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
       status = 'NEEDS_INPUT';
       stepRetries.S01 += 1;
       if (stepRetries.S01 > MAX_STEP_RETRY) {
-        stage.error = makeError('RETRY_LIMIT_EXCEEDED', 'Step retry limit exceeded', 'EXECUTION');
+        stage.error = makeError(MAX_RETRY_REASON, 'Step retry limit exceeded', 'EXECUTION');
+        status = 'NEEDS_INPUT';
       }
     } else {
       await applyPatch(patchPath, process.cwd());
@@ -434,6 +441,9 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
             stage.steps[0].status = 'NEEDS_INPUT';
             status = 'NEEDS_INPUT';
             stepRetries.S01 += 1;
+            if (stepRetries.S01 > MAX_STEP_RETRY) {
+              stage.error = makeError(MAX_RETRY_REASON, 'Step retry limit exceeded', 'EXECUTION');
+            }
           }
         }
       } catch {
@@ -455,7 +465,9 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
       stage.artifacts.errors_json = path.relative(process.cwd(), errorsPath);
     } else if (qaIssues.length) {
       // store QA issues also for UI
-      await writeErrors(errorsPath, makeError('QA_ISSUES', 'QA reported issues', 'TEST'));
+      const err = makeError('QA_ISSUES', 'QA reported issues', 'TEST');
+      err.meta = { issues: qaIssues };
+      await writeErrors(errorsPath, err);
       stage.artifacts.errors_json = path.relative(process.cwd(), errorsPath);
     }
 
@@ -485,7 +497,7 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
     // Finalize
     if (stepRetries.S01 > MAX_STEP_RETRY) {
       status = 'NEEDS_INPUT';
-      stage.error = makeError('RETRY_LIMIT_EXCEEDED', 'Step retry limit exceeded', 'EXECUTION');
+      stage.error = makeError(MAX_RETRY_REASON, 'Step retry limit exceeded', 'EXECUTION');
     }
     setStage(stage, status === 'DONE' ? 'DONE' : 'NEEDS_INPUT', 'END', status === 'DONE' ? 'Completed' : 'Needs input', gateFailed ? 'Quality gate failed' : 'Finished', 100);
     stage.ended_at = isoNow();
@@ -563,6 +575,7 @@ type AttemptMap = {
 
 const MAX_RETRY_PER_ROLE = 2;
 const MAX_STEP_RETRY = 3;
+const MAX_RETRY_REASON = 'RETRY_LIMIT_EXCEEDED';
 
 async function tryGitPush(workBranch: string): Promise<{ ok: boolean; detail: string }> {
   try {
