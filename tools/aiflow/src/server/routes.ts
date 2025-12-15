@@ -62,9 +62,14 @@ export async function buildRouter(configPath?: string) {
 
   router.put('/requests/:id', async (req, res) => {
     const markdown = req.body?.markdown;
+    const expected = req.body?.expected_updated_at;
     if (typeof markdown !== 'string') return res.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'markdown required' } });
     const file = path.join(cachedConfig.paths.requests_dir, `${req.params.id}.md`);
     if (!(await fs.pathExists(file))) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'request not found' } });
+    const current = await parseRequest(file);
+    if (expected && current.meta.updated_at && current.meta.updated_at !== expected) {
+      return res.status(409).json({ error: { code: 'CONFLICT', message: 'updated_at mismatch' } });
+    }
     await saveRequestMarkdown(file, markdown);
     const parsed = await parseRequest(file);
     res.json({ ok: true, updated_at: parsed.meta.updated_at, request: parsed });
@@ -116,6 +121,13 @@ export async function buildRouter(configPath?: string) {
     if (!(await fs.pathExists(stagePath))) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'stage missing' } });
     const stage = await loadStage(stagePath);
     res.json({ stage });
+  });
+
+  router.get('/requests/:id/runs/:runId/context', async (req, res) => {
+    const contextPath = path.join(cachedConfig.paths.runs_dir, req.params.id, req.params.runId, 'quality_context.json');
+    if (!(await fs.pathExists(contextPath))) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'context missing' } });
+    const context = await fs.readJSON(contextPath);
+    res.json({ context });
   });
 
   router.get('/requests/:id/runs/:runId/errors', async (req, res) => {

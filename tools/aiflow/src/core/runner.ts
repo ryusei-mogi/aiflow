@@ -184,6 +184,29 @@ async function writeReport(reportPath: string, request: ParsedRequest, runId: st
   await fs.writeFile(reportPath, lines.join('\n'), 'utf-8');
 }
 
+async function writeErrors(errorsPath: string, error: ErrorObject) {
+  const payload = {
+    version: '1.0',
+    error
+  };
+  await fs.writeJson(errorsPath, payload, { spaces: 2 });
+}
+
+async function writeQualityContext(contextPath: string, request: ParsedRequest, runId: string) {
+  const payload = {
+    version: '1.0',
+    request: {
+      id: request.id,
+      meta: request.meta
+    },
+    run: {
+      run_id: runId,
+      started_at: isoNow()
+    }
+  };
+  await fs.writeJson(contextPath, payload, { spaces: 2 });
+}
+
 export async function runRequest(requestId: string, config: AiflowConfig): Promise<RunnerResult> {
   const requestPath = path.join(config.paths.requests_dir, `${requestId}.md`);
   if (!(await fs.pathExists(requestPath))) {
@@ -194,6 +217,7 @@ export async function runRequest(requestId: string, config: AiflowConfig): Promi
   const runDir = path.join(config.paths.runs_dir, request.id, runId);
   const logsDir = path.join(runDir, 'logs');
   const patchesDir = path.join(runDir, 'patches');
+  const contextPath = path.join(runDir, 'quality_context.json');
   await fs.ensureDir(logsDir);
   await fs.ensureDir(patchesDir);
   const lockPath = path.join(config.paths.locks_dir || path.join(config.paths.aiflow_dir || '.aiflow', 'locks'), `${request.id}.lock`);
@@ -208,9 +232,12 @@ export async function runRequest(requestId: string, config: AiflowConfig): Promi
   const planning = buildPlanning(request, runId, config, patchPath, logPrefix);
   const planningPath = path.join(runDir, 'planning.json');
   await writePlanning(planningPath, planning);
+  await writeQualityContext(contextPath, request, runId);
 
   const stagePath = path.join(runDir, 'stage.json');
   const stage: StageFile = createStage(request.id, runId, config, planningPath);
+  stage.artifacts.planning_json = path.relative(process.cwd(), planningPath);
+  stage.artifacts.logs_dir = path.relative(process.cwd(), logsDir);
   stage.locks.request_lock.held = true;
   stage.locks.request_lock.acquired_at = isoNow();
   await writeStage(stagePath, stage);
@@ -266,6 +293,13 @@ export async function runRequest(requestId: string, config: AiflowConfig): Promi
     const reportPath = path.join(runDir, 'report.md');
     await writeReport(reportPath, request, runId, unitLogPath, status, stage.error || undefined);
     stage.artifacts.report_md = path.relative(process.cwd(), reportPath);
+    // errors.json if needed
+    const errorsPath = path.join(runDir, 'errors.json');
+    if (status !== 'DONE') {
+      const err = stage.error ?? makeError('UNIT_TEST_FAILED', 'Unit tests failed or were skipped', 'TEST');
+      await writeErrors(errorsPath, err);
+      stage.artifacts.errors_json = path.relative(process.cwd(), errorsPath);
+    }
 
     // Finalize
     setStage(stage, status === 'DONE' ? 'DONE' : 'NEEDS_INPUT', 'END', status === 'DONE' ? 'Completed' : 'Needs input', 'Finished', 100);
@@ -278,10 +312,10 @@ export async function runRequest(requestId: string, config: AiflowConfig): Promi
       ok: status === 'DONE',
       request_id: request.id,
       run_id: runId,
-      stage_path: stagePath,
-      planning_path: planningPath,
-      report_path: reportPath,
-      patches: [patchPath],
+      stage_path: path.relative(process.cwd(), stagePath),
+      planning_path: path.relative(process.cwd(), planningPath),
+      report_path: path.relative(process.cwd(), reportPath),
+      patches: [path.relative(process.cwd(), patchPath)],
       error: status === 'DONE' ? undefined : makeError('UNIT_TEST_FAILED', 'Unit tests failed or were skipped', 'TEST')
     };
   } catch (e: any) {

@@ -50,7 +50,10 @@ export async function parseRequest(filePath: string): Promise<ParsedRequest> {
     }
     metaEndIndex = i + 1;
   }
-  if (metaEndIndex === 0) metaEndIndex = 0;
+  // ifファイルが最後までメタのみで終わる場合
+  if (metaEndIndex === lines.length) {
+    metaEndIndex = lines.length;
+  }
   const bodyLines = lines.slice(metaEndIndex);
   const body_markdown = bodyLines.join('\n');
   const titleMatch = body_markdown.match(/^#\s+(.+)$/m);
@@ -81,7 +84,8 @@ export function serializeMeta(meta: RequestMeta): string {
   for (const key of unknownKeys) {
     lines.push(`${key}: ${meta.unknown[key]}`);
   }
-  return lines.join('\n') + '\n\n';
+  const metaBlock = lines.join('\n');
+  return metaBlock.length ? metaBlock + '\n\n' : '';
 }
 
 export async function writeRequest(filePath: string, meta: RequestMeta, body: string): Promise<void> {
