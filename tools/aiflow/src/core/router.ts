@@ -5,6 +5,7 @@ import util from 'util';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { RouterConfig } from './config.js';
+import chalk from 'chalk';
 
 const execAsync = util.promisify(exec);
 
@@ -50,6 +51,7 @@ export async function callLlm(router: RouterConfig, role: string, prompt: string
   try {
     const { stdout, stderr } = await execAsync(command.cmd, { maxBuffer: 2 * 1024 * 1024 });
     const raw = stdout || stderr;
+    process.stderr.write(chalk.gray(`LLM ${role}: ${command.cmd}\n`));
     const firstBrace = raw.indexOf('{');
     const lastBrace = raw.lastIndexOf('}');
     if (firstBrace === -1 || lastBrace === -1) {

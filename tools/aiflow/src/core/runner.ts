@@ -11,6 +11,7 @@ import { evaluateQualityGates } from './qualityGates.js';
 import { loadRouter } from './config.js';
 import { callLlm } from './router.js';
 import { validateIfExists, validateSchemaFile } from './validate.js';
+import chalk from 'chalk';
 
 const execAsync = util.promisify(exec);
 
@@ -329,6 +330,7 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
     let patchContent: string | null = null;
     // Try implementer LLM
     try {
+      process.stderr.write(chalk.gray(`Implementer role start run=${runId}\n`));
       const tmpl = await readPrompt('implementer.v1.md');
       const stepJson = JSON.stringify(planning.steps[0] || {}, null, 2);
       const targets = await fg(['**/*.*'], { cwd: process.cwd(), ignore: ['node_modules', 'runs', '.git', '.aiflow'] });
@@ -364,6 +366,7 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
     setStage(stage, 'RUNNING', 'TESTING', 'Testing', 'Running unit tests', 65);
     await writeStage(stagePath, stage);
     let unitLogPath: string | null = null;
+    let qaIssues: any[] = [];
     if (config.tests?.unit?.enabled) {
       unitLogPath = `${logPrefix}.unit.log`;
       const res = await execCommand(config.tests.unit.command || "echo 'no unit tests'", process.cwd(), (config.tests.unit.timeout_sec || 60) * 1000);
@@ -381,6 +384,34 @@ export async function runRequest(requestId: string, config: AiflowConfig, runIdO
 
     stage.steps[0].status = stage.steps[0].test.unit.status === 'FAIL' ? 'FAILED' : 'DONE';
     stage.steps[0].ended_at = isoNow();
+
+    // QA role (log/diff要約)
+    if (stage.steps[0].status === 'DONE') {
+      try {
+        const qaPromptTmpl = await readPrompt('qa.v1.md');
+        const diff = stage.artifacts.patches.join('\n');
+        const unitLogExcerpt = unitLogPath ? (await fs.readFile(unitLogPath, 'utf-8')).slice(0, 1200) : '';
+        const qaPrompt = fill(qaPromptTmpl, {
+          constraints: '- summarize diff and test\n',
+          acceptance_criteria_json: JSON.stringify(planning.context.acceptance_criteria || []),
+          diff_base_to_head: diff || 'no diff',
+          unit_log_excerpt: unitLogExcerpt || 'no unit log',
+          e2e_log_excerpt: ''
+        });
+        const qaSchema = path.resolve('.aiflow/schemas/qa.contract.v1.json');
+        const qaRes = await callLlm(routerConfig, 'qa', qaPrompt, qaSchema);
+        if (qaRes.ok && Array.isArray(qaRes.json?.issues)) {
+          qaIssues = qaRes.json.issues;
+          if (qaRes.json.status === 'failed') {
+            stage.error = makeError('QA_FAILED', 'QA reported issues', 'TEST');
+            stage.steps[0].status = 'NEEDS_INPUT';
+            status = 'NEEDS_INPUT';
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
 
     // Report
     let status = stage.steps[0].status === 'FAILED' ? 'NEEDS_INPUT' : 'DONE';
